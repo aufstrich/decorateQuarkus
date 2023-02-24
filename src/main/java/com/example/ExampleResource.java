@@ -1,50 +1,23 @@
 package com.example;
 
+import io.quarkus.arc.Priority;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.runtime.StartupEvent;
 import lombok.RequiredArgsConstructor;
 import lombok.SneakyThrows;
 import lombok.extern.jbosslog.JBossLog;
 
+import javax.decorator.Decorator;
+import javax.decorator.Delegate;
+import javax.enterprise.context.ApplicationScoped;
 import javax.enterprise.event.Observes;
-import javax.enterprise.inject.Produces;
+import javax.enterprise.inject.Any;
+import javax.inject.Inject;
 import java.time.Duration;
 import java.time.Instant;
 
 
 class ServiceProducers {
-
-    @Produces
-    BaseDoStuff produceBaseStuff() {
-        return new BaseDoStuff();
-    }
-
-    @Produces
-    TransactionalDoStuff produceTransactionalDoStuff(
-            BaseDoStuff baseDoStuff
-    ) {
-        return new TransactionalDoStuff(baseDoStuff);
-    }
-
-    @Produces
-    RetryingDoeStuff produceRetryingDoeStuff(
-            TransactionalDoStuff transactionalDoStuff
-    ) {
-        return new RetryingDoeStuff(transactionalDoStuff);
-    }
-
-    @Produces
-    MeteredDoeStuff produceRetryingDoeStuff(
-            RetryingDoeStuff retryingDoeStuff
-    ) {
-        return new MeteredDoeStuff(retryingDoeStuff);
-    }
-
-    @Produces
-    FinalConsumer produceFinalConsumer(MeteredDoeStuff meteredDoeStuff) {
-        return new FinalConsumer(meteredDoeStuff);
-    }
-
 
     void onStart(@Observes StartupEvent ev, FinalConsumer finalConsumer) {
         finalConsumer.okCool();
@@ -56,6 +29,7 @@ interface DoesStuff {
     String doStuff();
 }
 
+@ApplicationScoped
 class BaseDoStuff implements DoesStuff {
 
     @Override
@@ -65,31 +39,43 @@ class BaseDoStuff implements DoesStuff {
 }
 
 @RequiredArgsConstructor
+@Decorator
+@Priority(30)
 class TransactionalDoStuff implements DoesStuff {
-    private final DoesStuff delegate;
+    @Inject
+    @Any
+    @Delegate
+    DoesStuff delegate;
 
     @Override
     public String doStuff() {
-        return QuarkusTransaction.requiringNew().call(() -> "transactional" + this.delegate.doStuff());
+        return QuarkusTransaction.requiringNew().call(() -> this.delegate.doStuff() + "->transactional");
     }
 }
 
-@RequiredArgsConstructor
+@Decorator
+@Priority(20)
 class RetryingDoeStuff implements DoesStuff {
-
-    private final DoesStuff delegate;
+    @Inject
+    @Any
+    @Delegate
+    DoesStuff delegate;
 
     @Override
     public String doStuff() {
-        return "retrying" + this.delegate.doStuff();
+        return this.delegate.doStuff() + "->retrying";
     }
 }
 
 @JBossLog
-@RequiredArgsConstructor
+@Decorator
+@Priority(10)
 class MeteredDoeStuff implements DoesStuff {
 
-    private final DoesStuff delegate;
+    @Inject
+    @Any
+    @Delegate
+    DoesStuff delegate;
 
     @Override
     @SneakyThrows
@@ -97,7 +83,7 @@ class MeteredDoeStuff implements DoesStuff {
         Instant start = Instant.now();
         Instant end = null;
         try {
-            String result = "metered" + this.delegate.doStuff();
+            String result = this.delegate.doStuff() + "->metered";
             end = Instant.now();
             return result;
         } catch (Exception e) {
@@ -109,6 +95,7 @@ class MeteredDoeStuff implements DoesStuff {
     }
 }
 
+@ApplicationScoped
 @JBossLog
 @RequiredArgsConstructor
 class FinalConsumer {

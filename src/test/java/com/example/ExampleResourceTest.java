@@ -1,21 +1,22 @@
 package com.example;
 
 import io.quarkus.test.junit.QuarkusTest;
+import org.assertj.core.api.Assertions;
 import org.junit.jupiter.api.Test;
 
-import static io.restassured.RestAssured.given;
-import static org.hamcrest.CoreMatchers.is;
+import javax.inject.Inject;
 
 @QuarkusTest
-public class ExampleResourceTest {
+class ExampleResourceTest {
+
+    @Inject
+    DoesStuff blup;
+
 
     @Test
-    public void testHelloEndpoint() {
-        given()
-                .when().get("/hello")
-                .then()
-                .statusCode(200)
-                .body(is("Hello from RESTEasy Reactive"));
+    void testHelloEndpoint() {
+        String result = blup.doStuff();
+        Assertions.assertThat(result).isEqualTo("base->transactional->retrying->metered");
     }
 
 }
